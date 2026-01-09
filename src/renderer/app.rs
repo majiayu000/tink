@@ -1,0 +1,292 @@
+//! Application runner
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use crossterm::event::Event;
+
+use crate::core::Element;
+use crate::hooks::context::{HookContext, with_hooks};
+use crate::hooks::use_input::{clear_input_handlers, dispatch_key_event};
+use crate::layout::LayoutEngine;
+use crate::renderer::{Output, Terminal};
+
+/// Application options
+#[derive(Debug, Clone)]
+pub struct AppOptions {
+    /// Target frames per second
+    pub fps: u32,
+    /// Exit on Ctrl+C
+    pub exit_on_ctrl_c: bool,
+    /// Use alternate screen
+    pub alternate_screen: bool,
+}
+
+impl Default for AppOptions {
+    fn default() -> Self {
+        Self {
+            fps: 30,
+            exit_on_ctrl_c: true,
+            alternate_screen: true,
+        }
+    }
+}
+
+/// Application state
+pub struct App<F>
+where
+    F: Fn() -> Element,
+{
+    component: F,
+    terminal: Terminal,
+    layout_engine: LayoutEngine,
+    hook_context: Rc<RefCell<HookContext>>,
+    options: AppOptions,
+    should_exit: Arc<AtomicBool>,
+    needs_render: Arc<AtomicBool>,
+}
+
+impl<F> App<F>
+where
+    F: Fn() -> Element,
+{
+    /// Create a new app with default options
+    pub fn new(component: F) -> Self {
+        Self::with_options(component, AppOptions::default())
+    }
+
+    /// Create a new app with custom options
+    pub fn with_options(component: F, options: AppOptions) -> Self {
+        let needs_render = Arc::new(AtomicBool::new(true));
+        let hook_context = Rc::new(RefCell::new(HookContext::new()));
+
+        // Set up render callback
+        let needs_render_clone = needs_render.clone();
+        hook_context.borrow_mut().set_render_callback(Rc::new(move || {
+            needs_render_clone.store(true, Ordering::SeqCst);
+        }));
+
+        Self {
+            component,
+            terminal: Terminal::new(),
+            layout_engine: LayoutEngine::new(),
+            hook_context,
+            options,
+            should_exit: Arc::new(AtomicBool::new(false)),
+            needs_render,
+        }
+    }
+
+    /// Run the application
+    pub fn run(&mut self) -> std::io::Result<()> {
+        // Enter terminal mode
+        if self.options.alternate_screen {
+            self.terminal.enter()?;
+        } else {
+            self.terminal.enter_inline()?;
+        }
+
+        let frame_duration = Duration::from_millis(1000 / self.options.fps as u64);
+        let mut last_render = Instant::now();
+
+        // Initial render
+        self.render_frame()?;
+
+        loop {
+            // Handle input
+            if let Some(event) = Terminal::poll_event(Duration::from_millis(10))? {
+                self.handle_event(event);
+            }
+
+            if self.should_exit.load(Ordering::SeqCst) {
+                break;
+            }
+
+            // Throttle rendering - only render if needed or time elapsed
+            let now = Instant::now();
+            let time_elapsed = now.duration_since(last_render) >= frame_duration;
+            let render_requested = self.needs_render.load(Ordering::SeqCst);
+
+            if render_requested && time_elapsed {
+                self.needs_render.store(false, Ordering::SeqCst);
+                self.render_frame()?;
+                last_render = now;
+            }
+        }
+
+        // Clean up input handlers
+        clear_input_handlers();
+
+        // Exit terminal mode
+        if self.options.alternate_screen {
+            self.terminal.exit()?;
+        } else {
+            self.terminal.exit_inline()?;
+        }
+
+        Ok(())
+    }
+
+    fn handle_event(&mut self, event: Event) {
+        match event {
+            Event::Key(key_event) => {
+                // Handle Ctrl+C
+                if self.options.exit_on_ctrl_c && Terminal::is_ctrl_c(&Event::Key(key_event.clone())) {
+                    self.should_exit.store(true, Ordering::SeqCst);
+                    return;
+                }
+
+                // Dispatch to input handlers
+                dispatch_key_event(&key_event);
+
+                // Request re-render after input
+                self.needs_render.store(true, Ordering::SeqCst);
+            }
+            Event::Resize(_, _) => {
+                // Re-render on resize
+                self.needs_render.store(true, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+    }
+
+    fn render_frame(&mut self) -> std::io::Result<()> {
+        // Clear input handlers before render (they'll be re-registered)
+        clear_input_handlers();
+
+        // Get terminal size
+        let (width, height) = Terminal::size()?;
+
+        // Build element tree with hooks context
+        let root = with_hooks(self.hook_context.clone(), || {
+            (self.component)()
+        });
+
+        // Compute layout
+        self.layout_engine.compute(&root, width, height);
+
+        // Get the actual content size from layout
+        let root_layout = self.layout_engine.get_layout(root.id).unwrap_or_default();
+        let content_width = (root_layout.width as u16).max(1).min(width);
+        let content_height = (root_layout.height as u16).max(1).min(height);
+
+        // Render to output buffer sized to content
+        let mut output = Output::new(content_width, content_height);
+        self.render_element(&root, &mut output, 0.0, 0.0);
+
+        // Write to terminal
+        self.terminal.render(&output.render())
+    }
+
+    fn render_element(&self, element: &Element, output: &mut Output, offset_x: f32, offset_y: f32) {
+        // Get layout for this element
+        let layout = self.layout_engine.get_layout(element.id).unwrap_or_default();
+
+        let x = (offset_x + layout.x) as u16;
+        let y = (offset_y + layout.y) as u16;
+        let width = layout.width as u16;
+        let height = layout.height as u16;
+
+        // Render background if set
+        if element.style.background_color.is_some() {
+            output.fill_rect(x, y, width, height, ' ', &element.style);
+        }
+
+        // Render border if set
+        if element.style.has_border() {
+            self.render_border(element, output, x, y, width, height);
+        }
+
+        // Render text content
+        if let Some(text) = &element.text_content {
+            let text_x = x + if element.style.has_border() { 1 } else { 0 }
+                + element.style.padding.left as u16;
+            let text_y = y + if element.style.has_border() { 1 } else { 0 }
+                + element.style.padding.top as u16;
+            output.write(text_x, text_y, text, &element.style);
+        }
+
+        // Render children - Taffy already includes border/padding in child positions
+        let child_offset_x = offset_x + layout.x;
+        let child_offset_y = offset_y + layout.y;
+
+        for child in &element.children {
+            self.render_element(child, output, child_offset_x, child_offset_y);
+        }
+    }
+
+    fn render_border(&self, element: &Element, output: &mut Output, x: u16, y: u16, width: u16, height: u16) {
+        let (tl, tr, bl, br, h, v) = element.style.border_style.chars();
+
+        let mut border_style = element.style.clone();
+        if let Some(border_color) = element.style.border_color {
+            border_style.color = Some(border_color);
+        }
+        border_style.dim = element.style.border_dim;
+
+        // Top border
+        if element.style.border_top && height > 0 {
+            output.write_char(x, y, tl.chars().next().unwrap(), &border_style);
+            for col in (x + 1)..(x + width - 1) {
+                output.write_char(col, y, h.chars().next().unwrap(), &border_style);
+            }
+            if width > 1 {
+                output.write_char(x + width - 1, y, tr.chars().next().unwrap(), &border_style);
+            }
+        }
+
+        // Bottom border
+        if element.style.border_bottom && height > 1 {
+            let bottom_y = y + height - 1;
+            output.write_char(x, bottom_y, bl.chars().next().unwrap(), &border_style);
+            for col in (x + 1)..(x + width - 1) {
+                output.write_char(col, bottom_y, h.chars().next().unwrap(), &border_style);
+            }
+            if width > 1 {
+                output.write_char(x + width - 1, bottom_y, br.chars().next().unwrap(), &border_style);
+            }
+        }
+
+        // Left border
+        if element.style.border_left {
+            for row in (y + 1)..(y + height - 1) {
+                output.write_char(x, row, v.chars().next().unwrap(), &border_style);
+            }
+        }
+
+        // Right border
+        if element.style.border_right && width > 1 {
+            for row in (y + 1)..(y + height - 1) {
+                output.write_char(x + width - 1, row, v.chars().next().unwrap(), &border_style);
+            }
+        }
+    }
+
+    /// Request exit
+    pub fn exit(&self) {
+        self.should_exit.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Render a component to the terminal
+pub fn render<F>(component: F) -> std::io::Result<()>
+where
+    F: Fn() -> Element,
+{
+    App::new(component).run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_options_default() {
+        let options = AppOptions::default();
+        assert_eq!(options.fps, 30);
+        assert!(options.exit_on_ctrl_c);
+        assert!(options.alternate_screen);
+    }
+}
