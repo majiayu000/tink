@@ -37,6 +37,8 @@ pub use crate::hooks::{
     use_stdin,
     use_stdout,
     use_stderr,
+    use_measure,
+    measure_element,
     Signal,
     Key,
     AppContext,
@@ -46,4 +48,6 @@ pub use crate::hooks::{
     StdinHandle,
     StdoutHandle,
     StderrHandle,
+    Dimensions,
+    MeasureRef,
 };
