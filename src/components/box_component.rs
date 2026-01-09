@@ -3,7 +3,7 @@
 use crate::core::{
     Element, ElementType, Style, Color,
     FlexDirection, AlignItems, AlignSelf, JustifyContent,
-    Dimension, Edges, BorderStyle, Overflow, Position,
+    Dimension, Edges, BorderStyle, Overflow, Position, Display,
 };
 
 /// Box component builder
@@ -27,6 +27,26 @@ impl Box {
     /// Set key for reconciliation
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
+        self
+    }
+
+    // === Display ===
+
+    /// Set display type
+    pub fn display(mut self, display: Display) -> Self {
+        self.style.display = display;
+        self
+    }
+
+    /// Hide this element (display: none)
+    pub fn hidden(mut self) -> Self {
+        self.style.display = Display::None;
+        self
+    }
+
+    /// Show this element (display: flex)
+    pub fn visible(mut self) -> Self {
+        self.style.display = Display::Flex;
         self
     }
 

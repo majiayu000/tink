@@ -272,3 +272,41 @@ fn test_position_absolute() {
     assert_eq!(layout.x, 10.0);
     assert_eq!(layout.y, 5.0);
 }
+
+#[test]
+fn test_display_none() {
+    // Test that display: none elements have zero size in layout
+    let element = Box::new()
+        .width(80)
+        .height(24)
+        .child(
+            Box::new()
+                .hidden()  // display: none
+                .width(20)
+                .height(10)
+                .child(Text::new("Hidden").into_element())
+                .into_element()
+        )
+        .child(
+            Box::new()
+                .child(Text::new("Visible").into_element())
+                .into_element()
+        )
+        .into_element();
+
+    // Verify the hidden element has display: none
+    let hidden_child = element.children.iter().next().unwrap();
+    assert_eq!(hidden_child.style.display, Display::None);
+
+    // Test layout computation - hidden element should have zero size
+    let mut engine = LayoutEngine::new();
+    engine.compute(&element, 80, 24);
+
+    let hidden_layout = engine.get_layout(hidden_child.id);
+    assert!(hidden_layout.is_some());
+
+    let layout = hidden_layout.unwrap();
+    // Elements with display: none should have zero width/height
+    assert_eq!(layout.width, 0.0);
+    assert_eq!(layout.height, 0.0);
+}

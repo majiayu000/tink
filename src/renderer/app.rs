@@ -257,6 +257,11 @@ where
 
     /// Render element to output buffer (helper for static content)
     fn render_element_to_output(&self, element: &Element, engine: &LayoutEngine, output: &mut Output, offset_x: f32, offset_y: f32) {
+        // Skip elements with display: none
+        if element.style.display == crate::core::Display::None {
+            return;
+        }
+
         let layout = engine.get_layout(element.id).unwrap_or_default();
 
         let x = (offset_x + layout.x) as u16;
@@ -289,6 +294,11 @@ where
     }
 
     fn render_element(&self, element: &Element, output: &mut Output, offset_x: f32, offset_y: f32) {
+        // Skip elements with display: none
+        if element.style.display == crate::core::Display::None {
+            return;
+        }
+
         // Get layout for this element
         let layout = self.layout_engine.get_layout(element.id).unwrap_or_default();
 
