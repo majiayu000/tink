@@ -241,9 +241,33 @@ impl Box {
         self
     }
 
-    /// Set border color
+    /// Set border color (all sides)
     pub fn border_color(mut self, color: Color) -> Self {
         self.style.border_color = Some(color);
+        self
+    }
+
+    /// Set top border color
+    pub fn border_top_color(mut self, color: Color) -> Self {
+        self.style.border_top_color = Some(color);
+        self
+    }
+
+    /// Set right border color
+    pub fn border_right_color(mut self, color: Color) -> Self {
+        self.style.border_right_color = Some(color);
+        self
+    }
+
+    /// Set bottom border color
+    pub fn border_bottom_color(mut self, color: Color) -> Self {
+        self.style.border_bottom_color = Some(color);
+        self
+    }
+
+    /// Set left border color
+    pub fn border_left_color(mut self, color: Color) -> Self {
+        self.style.border_left_color = Some(color);
         self
     }
 

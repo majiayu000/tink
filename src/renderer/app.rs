@@ -328,46 +328,59 @@ where
     fn render_border(&self, element: &Element, output: &mut Output, x: u16, y: u16, width: u16, height: u16) {
         let (tl, tr, bl, br, h, v) = element.style.border_style.chars();
 
-        let mut border_style = element.style.clone();
-        if let Some(border_color) = element.style.border_color {
-            border_style.color = Some(border_color);
-        }
-        border_style.dim = element.style.border_dim;
+        // Create base style for borders
+        let mut base_style = element.style.clone();
+        base_style.dim = element.style.border_dim;
+
+        // Create per-side styles with their respective colors
+        let mut top_style = base_style.clone();
+        top_style.color = element.style.get_border_top_color();
+
+        let mut right_style = base_style.clone();
+        right_style.color = element.style.get_border_right_color();
+
+        let mut bottom_style = base_style.clone();
+        bottom_style.color = element.style.get_border_bottom_color();
+
+        let mut left_style = base_style.clone();
+        left_style.color = element.style.get_border_left_color();
 
         // Top border
         if element.style.border_top && height > 0 {
-            output.write_char(x, y, tl.chars().next().unwrap(), &border_style);
+            // Top-left corner uses left color if no top color, or top color
+            output.write_char(x, y, tl.chars().next().unwrap(), &top_style);
             for col in (x + 1)..(x + width - 1) {
-                output.write_char(col, y, h.chars().next().unwrap(), &border_style);
+                output.write_char(col, y, h.chars().next().unwrap(), &top_style);
             }
             if width > 1 {
-                output.write_char(x + width - 1, y, tr.chars().next().unwrap(), &border_style);
+                // Top-right corner uses top color
+                output.write_char(x + width - 1, y, tr.chars().next().unwrap(), &top_style);
             }
         }
 
         // Bottom border
         if element.style.border_bottom && height > 1 {
             let bottom_y = y + height - 1;
-            output.write_char(x, bottom_y, bl.chars().next().unwrap(), &border_style);
+            output.write_char(x, bottom_y, bl.chars().next().unwrap(), &bottom_style);
             for col in (x + 1)..(x + width - 1) {
-                output.write_char(col, bottom_y, h.chars().next().unwrap(), &border_style);
+                output.write_char(col, bottom_y, h.chars().next().unwrap(), &bottom_style);
             }
             if width > 1 {
-                output.write_char(x + width - 1, bottom_y, br.chars().next().unwrap(), &border_style);
+                output.write_char(x + width - 1, bottom_y, br.chars().next().unwrap(), &bottom_style);
             }
         }
 
         // Left border
         if element.style.border_left {
             for row in (y + 1)..(y + height - 1) {
-                output.write_char(x, row, v.chars().next().unwrap(), &border_style);
+                output.write_char(x, row, v.chars().next().unwrap(), &left_style);
             }
         }
 
         // Right border
         if element.style.border_right && width > 1 {
             for row in (y + 1)..(y + height - 1) {
-                output.write_char(x + width - 1, row, v.chars().next().unwrap(), &border_style);
+                output.write_char(x + width - 1, row, v.chars().next().unwrap(), &right_style);
             }
         }
     }

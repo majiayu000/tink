@@ -318,6 +318,10 @@ pub struct Style {
     // Border
     pub border_style: BorderStyle,
     pub border_color: Option<Color>,
+    pub border_top_color: Option<Color>,
+    pub border_right_color: Option<Color>,
+    pub border_bottom_color: Option<Color>,
+    pub border_left_color: Option<Color>,
     pub border_dim: bool,
     pub border_top: bool,
     pub border_bottom: bool,
@@ -431,6 +435,26 @@ impl Style {
     pub fn has_border(&self) -> bool {
         self.border_style.is_visible()
             && (self.border_top || self.border_bottom || self.border_left || self.border_right)
+    }
+
+    /// Get effective top border color
+    pub fn get_border_top_color(&self) -> Option<Color> {
+        self.border_top_color.or(self.border_color)
+    }
+
+    /// Get effective right border color
+    pub fn get_border_right_color(&self) -> Option<Color> {
+        self.border_right_color.or(self.border_color)
+    }
+
+    /// Get effective bottom border color
+    pub fn get_border_bottom_color(&self) -> Option<Color> {
+        self.border_bottom_color.or(self.border_color)
+    }
+
+    /// Get effective left border color
+    pub fn get_border_left_color(&self) -> Option<Color> {
+        self.border_left_color.or(self.border_color)
     }
 }
 
