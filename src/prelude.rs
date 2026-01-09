@@ -28,6 +28,8 @@ pub use crate::hooks::{
     use_signal,
     use_effect,
     use_input,
+    use_app,
     Signal,
     Key,
+    AppContext,
 };

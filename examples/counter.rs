@@ -7,13 +7,18 @@ fn main() -> std::io::Result<()> {
 }
 
 fn counter_app() -> Element {
+    // App context for programmatic exit
+    let app = use_app();
+
     // Reactive state
     let count = use_signal(|| 0i32);
 
     // Handle keyboard input
     let count_for_input = count.clone();
     use_input(move |input, key| {
-        if key.up_arrow || input == "k" {
+        if input == "q" {
+            app.exit();
+        } else if key.up_arrow || input == "k" {
             count_for_input.update(|c| *c += 1);
         } else if key.down_arrow || input == "j" {
             count_for_input.update(|c| *c -= 1);
@@ -70,7 +75,7 @@ fn counter_app() -> Element {
                         .into_element()
                 )
                 .child(
-                    Text::new("  Ctrl+C: Exit")
+                    Text::new("  q:      Exit")
                         .dim()
                         .into_element()
                 )

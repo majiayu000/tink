@@ -9,6 +9,7 @@ use crossterm::event::Event;
 
 use crate::core::Element;
 use crate::hooks::context::{HookContext, with_hooks};
+use crate::hooks::use_app::{set_app_context, AppContext};
 use crate::hooks::use_input::{clear_input_handlers, dispatch_key_event};
 use crate::layout::LayoutEngine;
 use crate::renderer::{Output, Terminal};
@@ -159,10 +160,16 @@ where
         // Get terminal size
         let (width, height) = Terminal::size()?;
 
+        // Set up app context for use_app hook
+        set_app_context(Some(AppContext::new(self.should_exit.clone())));
+
         // Build element tree with hooks context
         let root = with_hooks(self.hook_context.clone(), || {
             (self.component)()
         });
+
+        // Clear app context after render
+        set_app_context(None);
 
         // Compute layout
         self.layout_engine.compute(&root, width, height);
