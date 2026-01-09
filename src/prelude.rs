@@ -32,7 +32,12 @@ pub use crate::hooks::{
     use_effect,
     use_input,
     use_app,
+    use_focus,
+    use_focus_manager,
     Signal,
     Key,
     AppContext,
+    FocusState,
+    FocusManagerHandle,
+    UseFocusOptions,
 };
