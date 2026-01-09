@@ -6,6 +6,7 @@ mod use_effect;
 pub mod use_input;
 pub(crate) mod use_app;
 mod use_focus;
+mod use_stdio;
 
 pub use context::{HookContext, with_hooks, current_context};
 pub use use_signal::{Signal, use_signal};
@@ -13,3 +14,4 @@ pub use use_effect::{use_effect, use_effect_once};
 pub use use_input::{use_input, Key};
 pub use use_app::{use_app, AppContext, set_app_context, get_app_context};
 pub use use_focus::{use_focus, use_focus_manager, FocusState, FocusManagerHandle, UseFocusOptions};
+pub use use_stdio::{use_stdin, use_stdout, use_stderr, StdinHandle, StdoutHandle, StderrHandle};
